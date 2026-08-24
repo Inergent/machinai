@@ -9,7 +9,7 @@ import type {
   Meter,
   Story,
   TestResult,
-} from "@/lib/fixtures/types";
+} from "@/lib/types";
 import { StoryBadge } from "./state";
 
 /** Section heading. Grouping is done with space, not boxes. */

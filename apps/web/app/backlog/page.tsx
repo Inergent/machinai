@@ -5,7 +5,7 @@ import { Empty, Mono, Section, StoryRow } from "@/components/machinai/pieces";
 import { SignInPrompt } from "@/components/machinai/sign-in";
 import { listStories, projectRef } from "@/lib/github-data";
 import { currentSession } from "@/lib/session";
-import type { Story, StoryState } from "@/lib/fixtures/types";
+import type { Story, StoryState } from "@/lib/types";
 
 // Always live: a backlog that disagrees with GitHub is worse than a slow page.
 export const dynamic = "force-dynamic";

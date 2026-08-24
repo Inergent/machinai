@@ -1,7 +1,7 @@
 import { Check, Minus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { duration } from "@/lib/format";
-import type { RunStep } from "@/lib/fixtures/types";
+import type { RunStep } from "@/lib/types";
 
 /**
  * The screen you stare at from the beach. A vertical stepper where exactly one

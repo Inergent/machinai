@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { RunState, StoryState } from "@/lib/fixtures/types";
+import type { RunState, StoryState } from "@/lib/types";
 
 /**
  * The whole app's colour vocabulary lives here. Five states, five tokens.

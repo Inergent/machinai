@@ -9,7 +9,7 @@ import type {
   RunState,
   Story,
   StoryState,
-} from "./fixtures/types";
+} from "./types";
 
 /**
  * Real GitHub reads, shaped into the types the UI already renders.

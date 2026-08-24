@@ -1,0 +1,74 @@
+name: Plan a backlog
+
+# Turns an idea into filed GitHub issues.
+#
+# No Vercel sandbox: decomposition reads nothing and executes nothing, so it
+# runs `claude -p` directly on the runner. That keeps sandbox quota for the work
+# that actually needs a VM, and makes planning effectively free.
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'Target repository, "owner/name"'
+        required: true
+        type: string
+      idea:
+        description: "What you want built, in a sentence or two"
+        required: true
+        type: string
+      dry_run:
+        description: "Decompose and print, but file nothing"
+        required: false
+        default: "false"
+        type: string
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # One planning run per repo at a time; two concurrent decompositions would
+    # file overlapping backlogs.
+    concurrency:
+      group: machinai-plan-${{ inputs.repo }}
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Split the target repo
+        id: target
+        env:
+          REPO: ${{ inputs.repo }}
+        run: |
+          set -eu
+          echo "owner=${REPO%%/*}" >> "$GITHUB_OUTPUT"
+          echo "name=${REPO##*/}" >> "$GITHUB_OUTPUT"
+
+      - name: Mint an installation token for the target repo
+        id: token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ steps.target.outputs.owner }}
+          repositories: ${{ steps.target.outputs.name }}
+
+      - name: Decompose and file
+        working-directory: packages/planner
+        env:
+          MACHINAI_REPO: ${{ inputs.repo }}
+          MACHINAI_IDEA: ${{ inputs.idea }}
+          MACHINAI_GITHUB_TOKEN: ${{ steps.token.outputs.token }}
+          MACHINAI_DRY_RUN: ${{ inputs.dry_run == 'true' && '1' || '0' }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: npx tsx plan.ts

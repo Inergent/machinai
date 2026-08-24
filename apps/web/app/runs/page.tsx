@@ -6,7 +6,7 @@ import { SignInPrompt } from "@/components/machinai/sign-in";
 import { duration, since } from "@/lib/format";
 import { listRuns, projectRef } from "@/lib/github-data";
 import { currentSession } from "@/lib/session";
-import type { Run } from "@/lib/fixtures/types";
+import type { Run } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 

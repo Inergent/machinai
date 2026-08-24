@@ -1,9 +1,10 @@
 /**
  * The machinai data contract.
  *
- * Phase 1 renders entirely from fixtures shaped by these types. Phase 5 swaps
- * the fixture imports for real GitHub reads without touching a component, so
- * treat every field here as a promise about what the backend will supply.
+ * These began as fixture shapes designed before any backend existed, and the
+ * components were built against them. They now describe what lib/github-data.ts
+ * returns from real GitHub reads — the component layer needed no changes when
+ * the data became real, which is what they were for.
  */
 
 export type StoryState =
