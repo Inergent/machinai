@@ -1,0 +1,50 @@
+name: Deploy web
+
+# Keeps the running webhook in step with main.
+#
+# This exists because of a real failure: the webhook's default install command
+# was fixed in source, committed and pushed — but the Vercel function was never
+# redeployed, so the live handler kept sending the old value and overrode the
+# very detection meant to replace it. The build failed for a reason that had
+# already been fixed in the repo.
+#
+# Vercel's GitHub integration would do this too, but it needs a browser
+# authorization on the org. This needs nothing but the token we already hold.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Deploy to production
+        working-directory: apps/web
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          npx --yes vercel@latest pull --yes --environment=production --token "$VERCEL_TOKEN"
+          npx --yes vercel@latest build --prod --token "$VERCEL_TOKEN"
+          url=$(npx --yes vercel@latest deploy --prebuilt --prod --token "$VERCEL_TOKEN")
+          echo "deployed $url"
+          # One stable hostname for both the app and the GitHub App's webhook,
+          # so a deploy never moves the URL GitHub is configured to call.
+          npx --yes vercel@latest alias set "$url" machinai-dev.vercel.app --token "$VERCEL_TOKEN"
