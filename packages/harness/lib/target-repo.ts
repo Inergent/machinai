@@ -69,11 +69,21 @@ export function prepareTargetRepo(opts: {
   const dir = resolve(opts.workdir);
   const authUrl = `https://x-access-token:${opts.githubToken}@github.com/${opts.repo}.git`;
 
+  if (dir.length > 40 && process.platform === "win32") {
+    console.warn(
+      `warning: workdir path is ${dir.length} chars. Sandcastle nests worktrees ` +
+        `under .sandcastle/worktrees/<branch>/, so a long root can still exceed ` +
+        `Windows MAX_PATH even with core.longpaths. Prefer something like C:\\mi.`,
+    );
+  }
+
   if (!existsSync(join(dir, ".git"))) {
     mkdirSync(dir, { recursive: true });
     // Full history: Sandcastle's worktrees and branch reuse need real refs,
     // and a shallow clone breaks resuming an existing machinai/* branch.
-    execFileSync("git", ["clone", authUrl, dir], { stdio: "inherit" });
+    execFileSync("git", ["clone", "-c", "core.longpaths=true", authUrl, dir], {
+      stdio: "inherit",
+    });
   } else {
     run(dir, "git", ["remote", "set-url", "origin", authUrl]);
     run(dir, "git", ["fetch", "origin", "--prune"]);
@@ -85,6 +95,21 @@ export function prepareTargetRepo(opts: {
   git("config", "user.email", "machinai[bot]@users.noreply.github.com");
   // Keep the token out of any log or error Sandcastle might surface.
   git("config", "credential.helper", "");
+
+  // Sandcastle moves commits out of an isolated sandbox as patches and replays
+  // them with `git am`. On a Windows host with the usual global
+  // core.autocrlf=true, the checkout has CRLF endings while the sandbox
+  // produced an LF patch, so every context line mismatches and the apply fails
+  // with "Patch application failed at step 1". A bot clone should never
+  // translate endings anyway — this is the correct setting on every platform,
+  // not a Windows workaround.
+  git("config", "core.autocrlf", "false");
+  git("config", "core.eol", "lf");
+
+  // Sandcastle nests worktrees at .sandcastle/worktrees/<branch>/, which on
+  // Windows pushes real file paths past the 260-character MAX_PATH limit and
+  // fails with "Filename too long" during cleanup.
+  git("config", "core.longpaths", "true");
 
   excludeMachinaiArtifacts(dir);
 
