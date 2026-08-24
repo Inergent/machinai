@@ -1,8 +1,13 @@
 node_modules/
+
+# Anchored deliberately. A bare `build/` or `dist/` matches any directory of
+# that name at any depth — it silently swallowed apps/web/app/api/build/, so
+# the Build endpoint was never committed and 404'd in production.
+/dist/
+/build/
+/out/
+
 .next/
-out/
-dist/
-build/
 .turbo/
 *.tsbuildinfo
 next-env.d.ts
@@ -11,8 +16,8 @@ next-env.d.ts
 .env*.local
 .vercel/
 
+# Harness working checkouts
+.machinai-work/
+
 .DS_Store
 Thumbs.db
-
-# harness working checkouts
-.machinai-work/
