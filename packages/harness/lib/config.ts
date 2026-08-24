@@ -28,6 +28,12 @@ export interface HarnessConfig {
    */
   readonly vercelToken: string;
   readonly vercelTeamId: string;
+  /**
+   * Required whenever the credential is passed explicitly — the Sandbox SDK
+   * will not infer it, and fails with "Missing credentials parameters" if it
+   * is absent. Any project on the team works; it only scopes billing.
+   */
+  readonly vercelProjectId: string;
 
   /** Where the target repo gets cloned. */
   readonly workdir: string;
@@ -47,6 +53,12 @@ export interface HarnessConfig {
 
   /** When true, do everything except push, comment, or open a PR. */
   readonly dryRun: boolean;
+
+  /**
+   * Credentials handed to the agent inside the sandbox. Only the Claude
+   * credential belongs here — never a GitHub token.
+   */
+  readonly agentEnv: Record<string, string>;
 }
 
 class ConfigError extends Error {}
@@ -91,6 +103,7 @@ export function loadConfig(): HarnessConfig {
     vercelToken:
       process.env.VERCEL_TOKEN || req("VERCEL_OIDC_TOKEN"),
     vercelTeamId: req("VERCEL_TEAM_ID"),
+    vercelProjectId: req("VERCEL_PROJECT_ID"),
     workdir: process.env.MACHINAI_WORKDIR || ".machinai-work",
     attempt: num("MACHINAI_ATTEMPT", 1),
     maxAttempts: num("MACHINAI_MAX_ATTEMPTS", 5),
@@ -101,7 +114,17 @@ export function loadConfig(): HarnessConfig {
     vcpus: num("MACHINAI_VCPUS", 2),
     model: process.env.MACHINAI_MODEL || "claude-opus-4-8",
     dryRun: process.env.MACHINAI_DRY_RUN === "1",
+    agentEnv: agentEnv(),
   };
+}
+
+function agentEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  const oauth = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (oauth) env.CLAUDE_CODE_OAUTH_TOKEN = oauth;
+  else if (apiKey) env.ANTHROPIC_API_KEY = apiKey;
+  return env;
 }
 
 /** Deterministic so re-running a story resumes its branch instead of forking. */

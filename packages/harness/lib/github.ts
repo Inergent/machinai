@@ -63,6 +63,47 @@ export class Gh {
     };
   }
 
+  /**
+   * The story as text, for injection into the agent's prompt.
+   *
+   * Fetched on the host on purpose. The sandbox has no `gh` and — more
+   * importantly — gets no GitHub token, so a tenant's credential never enters
+   * an agent environment. All GitHub I/O stays here.
+   */
+  issueContext(n: number): string {
+    const raw = this.run([
+      "issue", "view", String(n),
+      "--repo", this.repo,
+      "--json", "number,title,body,labels,comments",
+    ]);
+    const issue = JSON.parse(raw) as {
+      number: number;
+      title: string;
+      body: string;
+      labels: { name: string }[];
+      comments: { author: { login: string }; body: string; createdAt: string }[];
+    };
+
+    const lines = [
+      `Issue #${issue.number}: ${issue.title}`,
+      `Labels: ${issue.labels.map((l) => l.name).join(", ") || "(none)"}`,
+      "",
+      issue.body?.trim() || "(no description)",
+    ];
+
+    if (issue.comments.length > 0) {
+      lines.push("", "## Comments (oldest first)");
+      for (const c of issue.comments) {
+        lines.push(
+          "",
+          `### ${c.author?.login ?? "unknown"} — ${c.createdAt.slice(0, 16).replace("T", " ")}`,
+          c.body.trim(),
+        );
+      }
+    }
+    return lines.join("\n");
+  }
+
   /** Comments are how machinai keeps an audit trail without touching the repo. */
   comment(n: number, body: string): void {
     this.run(

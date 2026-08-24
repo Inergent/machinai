@@ -15,7 +15,34 @@ import { branchFor, loadConfig } from "./lib/config.js";
 import { Gh, LABELS } from "./lib/github.js";
 import { assertNoFootprint, prepareTargetRepo } from "./lib/target-repo.js";
 
+/** Counted toward a story's attempt budget: the agent actually ran. */
 const CHECKPOINT_MARKER = "<!-- machinai:checkpoint -->";
+/** Not counted: machinai itself broke before the agent got a turn. */
+const INFRA_MARKER = "<!-- machinai:infra-failure -->";
+
+/**
+ * The agent writes its status inside <checkpoint> tags; the host posts it. That
+ * keeps every GitHub write on this side of the sandbox boundary.
+ */
+function extractCheckpoint(stdout: string): string | null {
+  const match = /<checkpoint>([\s\S]*?)<\/checkpoint>/i.exec(stdout);
+  const body = match?.[1]?.trim();
+  return body ? body : null;
+}
+
+function checkpointComment(
+  attempt: number,
+  maxAttempts: number,
+  outcome: string,
+  agentNote: string | null,
+): string {
+  return [
+    CHECKPOINT_MARKER,
+    `**Attempt ${attempt} of ${maxAttempts} — ${outcome}**`,
+    "",
+    agentNote ?? "_The agent did not leave a checkpoint note._",
+  ].join("\n");
+}
 
 async function main() {
   const cfg = loadConfig();
@@ -60,21 +87,44 @@ async function main() {
   const resuming = attempt > 1;
   const budgetMinutes = Math.round(cfg.budgetMs / 60_000);
 
+  // Gathered on the host: it has gh, git and the token, and doing it here keeps
+  // the prompt deterministic instead of depending on what the sandbox image
+  // happens to ship.
+  const issueContext = gh.issueContext(cfg.issueNumber);
+  const recentCommits = target.git(
+    "log", "-n", "10", "--format=%h %ad %s", "--date=short",
+  );
+  const branchProgress = (() => {
+    try {
+      const log = target.git(
+        "log",
+        "--format=%h %s",
+        `origin/${cfg.baseBranch}..origin/${branch}`,
+      );
+      return log || "(branch exists but has no commits yet)";
+    } catch {
+      return "(nothing yet — this is the first attempt on this branch)";
+    }
+  })();
+
   let result: sandcastle.RunResult;
   try {
     result = await sandcastle.run({
       name: `#${cfg.issueNumber}`,
       cwd: target.dir,
-      agent: sandcastle.claudeCode(cfg.model, {
-        env: {
-          // The agent talks to GitHub itself; same scoped token, no extra grant.
-          GH_TOKEN: cfg.githubToken,
-          GH_REPO: cfg.repo,
-        },
-      }),
+      // Sandcastle only forwards a process.env key into the sandbox if that key
+      // is *declared* in a .env file, and machinai deliberately has no
+      // .sandcastle directory — so the agent's credential has to be handed over
+      // explicitly here, or it starts up unauthenticated.
+      //
+      // No GH_TOKEN, deliberately: the sandbox reads GitHub only through the
+      // injected prompt and writes to it not at all, so a tenant credential
+      // never enters an agent environment.
+      agent: sandcastle.claudeCode(cfg.model, { env: cfg.agentEnv }),
       sandbox: vercel({
         token: cfg.vercelToken,
         teamId: cfg.vercelTeamId,
+        projectId: cfg.vercelProjectId,
         timeout: cfg.budgetMs,
         resources: { vcpus: cfg.vcpus },
       }),
@@ -87,11 +137,13 @@ async function main() {
       },
       promptFile: join(import.meta.dirname, "prompts", "implement.md"),
       promptArgs: {
+        ISSUE_CONTEXT: issueContext,
+        RECENT_COMMITS: recentCommits,
+        BRANCH_PROGRESS: branchProgress,
         REPO: cfg.repo,
         ISSUE_NUMBER: cfg.issueNumber,
         ISSUE_TITLE: cfg.issueTitle,
         BRANCH: branch,
-        BASE_BRANCH: cfg.baseBranch,
         INSTALL_CMD: cfg.installCmd,
         TEST_CMD: cfg.testCmd,
         ATTEMPT: attempt,
@@ -104,7 +156,17 @@ async function main() {
       maxIterations: cfg.maxIterations,
       hooks: {
         sandbox: {
-          onSandboxReady: [{ command: cfg.installCmd, timeoutMs: 10 * 60_000 }],
+          onSandboxReady: [
+            // Sandcastle's vercel() passes `runtime`, never `image`, so we land
+            // on the node22 runtime (Amazon Linux 2023) rather than the
+            // `universal` managed image. It ships git, node and curl — but not
+            // Claude Code, so the agent has to install itself.
+            {
+              command: "curl -fsSL https://claude.ai/install.sh | bash",
+              timeoutMs: 5 * 60_000,
+            },
+            { command: cfg.installCmd, timeoutMs: 10 * 60_000 },
+          ],
         },
       },
       logging: { type: "stdout" },
@@ -116,9 +178,12 @@ async function main() {
         add: [LABELS.blocked],
         remove: [LABELS.inProgress],
       });
+      // INFRA_MARKER, not CHECKPOINT_MARKER: the run died before the agent
+      // could do anything, so this is machinai's fault, not the story's. It
+      // must not consume one of the story's attempts.
       gh.comment(
         cfg.issueNumber,
-        `${CHECKPOINT_MARKER}\n**Attempt ${attempt} failed before the agent finished.**\n\n\`\`\`\n${message.slice(0, 2000)}\n\`\`\``,
+        `${INFRA_MARKER}\n**machinai failed to run** (attempt ${attempt} was not spent).\n\n\`\`\`\n${message.slice(0, 2000)}\n\`\`\``,
       );
     }
     throw error;
@@ -138,9 +203,13 @@ async function main() {
       });
       gh.comment(
         cfg.issueNumber,
-        `${CHECKPOINT_MARKER}\n**Attempt ${attempt} produced no commits.**\n\n` +
-          `The agent ran but did not change anything. That usually means the story is ambiguous ` +
-          `or the work is already done. Worth a human look before spending another run.`,
+        checkpointComment(
+          attempt,
+          cfg.maxAttempts,
+          "no commits",
+          extractCheckpoint(result.stdout) ??
+            "The agent ran but changed nothing. That usually means the story is ambiguous, or the work is already done. Worth a look before spending another run.",
+        ),
       );
     }
     return;
@@ -156,6 +225,8 @@ async function main() {
 
   target.git("push", "--force-with-lease", "origin", branch);
 
+  const agentNote = extractCheckpoint(result.stdout);
+
   if (complete) {
     const pr = gh.ensurePullRequest({
       branch,
@@ -166,6 +237,15 @@ async function main() {
         `Built by machinai in ${attempt} attempt${attempt === 1 ? "" : "s"}. ` +
         `Nobody has reviewed this yet — that part is yours.\n`,
     });
+    gh.comment(
+      cfg.issueNumber,
+      checkpointComment(
+        attempt,
+        cfg.maxAttempts,
+        pr ? `complete, PR #${pr} open for review` : "complete",
+        agentNote,
+      ),
+    );
     gh.setLabels(cfg.issueNumber, {
       add: [LABELS.inReview],
       remove: [LABELS.inProgress],
@@ -174,6 +254,15 @@ async function main() {
   } else {
     // Out of budget with real work committed: hand it straight back for
     // another attempt on the same branch.
+    gh.comment(
+      cfg.issueNumber,
+      checkpointComment(
+        attempt,
+        cfg.maxAttempts,
+        `out of budget with ${commits} commit(s) — resuming on the same branch`,
+        agentNote,
+      ),
+    );
     gh.setLabels(cfg.issueNumber, {
       add: [LABELS.ready],
       remove: [LABELS.inProgress],
