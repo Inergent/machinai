@@ -51,6 +51,8 @@ const ROLES = {
     },
     events: ["issues", "issue_comment", "pull_request", "pull_request_review"],
     webhook: true,
+    // This app also signs users in, so it needs an OAuth callback URL.
+    oauth: true,
     credsFile: "machinai-github-app.json",
     blurb: [
       ["Contents", "read &amp; write", "clone, push agent branches"],
@@ -66,6 +68,8 @@ const ROLES = {
     permissions: { actions: "write", metadata: "read" },
     events: [],
     webhook: false,
+    // Machine-to-machine only; nobody signs in with it.
+    oauth: false,
     credsFile: "machinai-dispatch-app.json",
     blurb: [
       ["Actions", "read &amp; write", "start the build workflow"],
@@ -97,7 +101,12 @@ const manifest = {
         },
       }
     : {}),
+  // Where GitHub returns *after creating the app* — consumed by this script.
   redirect_url: `http://localhost:${PORT}/callback`,
+  // Where GitHub returns after a *user signs in*. A different thing entirely,
+  // and omitting it fails at first login with "This GitHub App must be
+  // configured with a callback URL" rather than at registration.
+  ...(role.oauth ? { callback_urls: [`${WEBHOOK_BASE}/api/auth/callback`] } : {}),
   public: false,
   // Exactly what this role needs and nothing more.
   default_permissions: role.permissions,
