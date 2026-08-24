@@ -14,9 +14,13 @@ export interface HarnessConfig {
   readonly issueTitle: string;
   readonly baseBranch: string;
 
-  /** Per-project build commands, supplied by the caller. */
-  readonly installCmd: string;
-  readonly testCmd: string;
+  /**
+   * Per-project build commands. Left undefined when the caller has no opinion,
+   * in which case the harness detects them from the checkout — hardcoding
+   * `npm ci` breaks on the first repo without a lockfile.
+   */
+  readonly installCmd: string | undefined;
+  readonly testCmd: string | undefined;
 
   /** GitHub App installation token, scoped to `repo`. Expires in ~1 hour. */
   readonly githubToken: string;
@@ -97,8 +101,8 @@ export function loadConfig(): HarnessConfig {
     issueNumber: num("MACHINAI_ISSUE_NUMBER", NaN),
     issueTitle: req("MACHINAI_ISSUE_TITLE"),
     baseBranch: process.env.MACHINAI_BASE_BRANCH || "main",
-    installCmd: process.env.MACHINAI_INSTALL_CMD || "npm ci",
-    testCmd: process.env.MACHINAI_TEST_CMD || "npm test",
+    installCmd: process.env.MACHINAI_INSTALL_CMD || undefined,
+    testCmd: process.env.MACHINAI_TEST_CMD || undefined,
     githubToken: req("MACHINAI_GITHUB_TOKEN"),
     vercelToken:
       process.env.VERCEL_TOKEN || req("VERCEL_OIDC_TOKEN"),

@@ -14,6 +14,7 @@ import { vercelSandbox } from "./lib/vercel-sandbox.js";
 import { branchFor, loadConfig } from "./lib/config.js";
 import { Gh, LABELS } from "./lib/github.js";
 import { assertNoFootprint, prepareTargetRepo } from "./lib/target-repo.js";
+import { detectCommands } from "./lib/detect.js";
 
 /** Counted toward a story's attempt budget: the agent actually ran. */
 const CHECKPOINT_MARKER = "<!-- machinai:checkpoint -->";
@@ -90,6 +91,14 @@ async function main() {
     });
   }
 
+  // Detected from the checkout, so an unconfigured repo still builds.
+  const cmds = detectCommands(target.dir, {
+    install: cfg.installCmd,
+    test: cfg.testCmd,
+  });
+  console.log(`install: ${cmds.install}  (${cmds.source.install})`);
+  console.log(`test:    ${cmds.test || "(none)"}  (${cmds.source.test})`);
+
   const resuming = attempt > 1;
   const budgetMinutes = Math.round(cfg.budgetMs / 60_000);
 
@@ -150,8 +159,8 @@ async function main() {
         ISSUE_NUMBER: cfg.issueNumber,
         ISSUE_TITLE: cfg.issueTitle,
         BRANCH: branch,
-        INSTALL_CMD: cfg.installCmd,
-        TEST_CMD: cfg.testCmd,
+        INSTALL_CMD: cmds.install,
+        TEST_CMD: cmds.test || "(this project has no test command)",
         ATTEMPT: attempt,
         MAX_ATTEMPTS: cfg.maxAttempts,
         BUDGET_MINUTES: budgetMinutes,
@@ -171,7 +180,7 @@ async function main() {
               command: "curl -fsSL https://claude.ai/install.sh | bash",
               timeoutMs: 5 * 60_000,
             },
-            { command: cfg.installCmd, timeoutMs: 10 * 60_000 },
+            { command: cmds.install, timeoutMs: 10 * 60_000 },
           ],
         },
       },

@@ -25,11 +25,17 @@ const LABEL = {
   blocked: "machinai:blocked",
 } as const;
 
-/** Per-project build settings. Phase 5 reads these from a database. */
+/**
+ * Per-project build settings. Phase 5 reads these from a database.
+ *
+ * Empty commands are deliberate: the harness detects them from the checkout.
+ * A default of `npm ci` fails on any repo without a lockfile, which is a poor
+ * first impression for "point machinai at any repo".
+ */
 const DEFAULTS = {
   baseBranch: "main",
-  installCmd: "npm ci",
-  testCmd: "npm test",
+  installCmd: "",
+  testCmd: "",
 };
 
 type IssueEvent = {

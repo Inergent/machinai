@@ -27,13 +27,17 @@ on:
         required: false
         default: main
         type: string
+      # Blank by default: the harness inspects the checkout and picks the right
+      # commands. Assuming `npm ci` fails on the first repo without a lockfile.
       install_cmd:
+        description: "Override the detected install command"
         required: false
-        default: npm ci
+        default: ""
         type: string
       test_cmd:
+        description: "Override the detected test command"
         required: false
-        default: npm test
+        default: ""
         type: string
       budget_ms:
         description: "Sandbox wall-clock budget. Keep under Vercel Hobby's 45-minute session cap."
