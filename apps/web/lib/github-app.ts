@@ -116,9 +116,29 @@ export async function installationToken(
   return { token: body.token, expiresAt: body.expires_at };
 }
 
-/** Fire the build workflow in machinai's own repo against someone else's repo. */
+/**
+ * Fire the build workflow in machinai's own repo against someone else's repo.
+ *
+ * Note the credential: this uses `MACHINAI_DISPATCH_TOKEN`, *not* the
+ * installation token. Two different things are going on and they should not
+ * share a credential:
+ *
+ *  - The installation token grants access to the customer's repo. They granted
+ *    it by installing the app, and it carries no `actions` permission because
+ *    machinai has no business running workflows in their repo.
+ *  - Triggering our own CI is machinai's infrastructure, on machinai's repo.
+ *
+ * Keeping them separate also means the app never has to ask a customer for
+ * `actions: write`, which would be an alarming permission to request and an
+ * unnecessary one to hold.
+ *
+ * The installation id is passed as an input rather than a token: the workflow
+ * mints its own fresh one, so a queued run cannot start with a token that has
+ * already expired.
+ */
 export async function dispatchBuild(opts: {
-  token: string;
+  dispatchToken: string;
+  installationId: number;
   targetRepo: string;
   issueNumber: number;
   issueTitle: string;
@@ -133,7 +153,7 @@ export async function dispatchBuild(opts: {
     {
       method: "POST",
       headers: {
-        authorization: `Bearer ${opts.token}`,
+        authorization: `Bearer ${opts.dispatchToken}`,
         accept: "application/vnd.github+json",
         "content-type": "application/json",
         "user-agent": "machinai",
@@ -147,6 +167,7 @@ export async function dispatchBuild(opts: {
           base_branch: opts.baseBranch,
           install_cmd: opts.installCmd,
           test_cmd: opts.testCmd,
+          installation_id: String(opts.installationId),
         },
       }),
     },

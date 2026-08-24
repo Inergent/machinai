@@ -160,8 +160,20 @@ export async function POST(request: Request) {
         return;
       }
 
+      const dispatchToken = process.env.MACHINAI_DISPATCH_TOKEN;
+      if (!dispatchToken) {
+        await comment(
+          repo,
+          issueNumber,
+          token,
+          "machinai received this but cannot start a build: `MACHINAI_DISPATCH_TOKEN` is not configured.",
+        );
+        return;
+      }
+
       await dispatchBuild({
-        token,
+        dispatchToken,
+        installationId,
         targetRepo: repo,
         issueNumber,
         issueTitle: payload.issue.title,

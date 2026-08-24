@@ -44,6 +44,10 @@ on:
         required: false
         default: "40"
         type: string
+      installation_id:
+        description: "GitHub App installation that granted access to the target repo"
+        required: true
+        type: string
 
 jobs:
   build:
@@ -67,6 +71,29 @@ jobs:
 
       - run: npm ci
 
+      # create-github-app-token wants the owner and the bare repo name
+      # separately, and the target is not necessarily in our own org.
+      - name: Split the target repo
+        id: target
+        env:
+          REPO: ${{ inputs.repo }}
+        run: |
+          set -eu
+          echo "owner=${REPO%%/*}" >> "$GITHUB_OUTPUT"
+          echo "name=${REPO##*/}" >> "$GITHUB_OUTPUT"
+
+      # Minted here rather than passed in by the webhook: installation tokens
+      # live one hour, and a run that waited in the Actions queue would
+      # otherwise start with an expired one.
+      - name: Mint an installation token for the target repo
+        id: token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ steps.target.outputs.owner }}
+          repositories: ${{ steps.target.outputs.name }}
+
       - name: Build the story
         working-directory: packages/harness
         env:
@@ -82,10 +109,9 @@ jobs:
           # deep, and a long root is what broke the first Windows runs.
           MACHINAI_WORKDIR: ${{ runner.temp }}/tb
 
-          # Scoped to the target repo. Phase 3 replaces this PAT with a GitHub
-          # App installation token minted per run — the App is what lets a user
-          # grant access by installing rather than by pasting a token.
-          MACHINAI_GITHUB_TOKEN: ${{ secrets.MACHINAI_GH_PAT }}
+          # Scoped to the target repo alone, expires in an hour, and exists
+          # only because the owner installed the app.
+          MACHINAI_GITHUB_TOKEN: ${{ steps.token.outputs.token }}
 
           # OIDC is unavailable off-platform, so CI needs a real Vercel token.
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -102,7 +128,7 @@ jobs:
         # machinai:in-progress forever.
         if: failure() || cancelled()
         env:
-          GH_TOKEN: ${{ secrets.MACHINAI_GH_PAT }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -eu
