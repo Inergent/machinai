@@ -80,7 +80,13 @@ async function main() {
   if (!cfg.dryRun) {
     gh.setLabels(cfg.issueNumber, {
       add: [LABELS.inProgress],
-      remove: [LABELS.ready, LABELS.revise, LABELS.stuck, LABELS.planReview],
+      remove: [
+        LABELS.ready,
+        LABELS.revise,
+        LABELS.stuck,
+        LABELS.blocked,
+        LABELS.planReview,
+      ],
     });
   }
 
