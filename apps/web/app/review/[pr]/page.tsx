@@ -30,15 +30,15 @@ export default async function ReviewPage({ params }: PageProps<"/review/[pr]">) 
       lead={
         pull.state === "merged"
           ? "Merged."
-          : "The agent's work, ready for your call."
+          : "Finished work, ready for your call."
       }
       back={
         pull.storyNumber
           ? {
               href: `/backlog/${pull.storyNumber}`,
-              label: `Story #${pull.storyNumber}`,
+              label: `Task #${pull.storyNumber}`,
             }
-          : { href: "/backlog", label: "Backlog" }
+          : { href: "/backlog", label: "Work" }
       }
     >
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -59,7 +59,7 @@ export default async function ReviewPage({ params }: PageProps<"/review/[pr]">) 
       </div>
 
       {summary && (
-        <Section title="What the agent did">
+        <Section title="What machinai did">
           <Panel className="whitespace-pre-wrap px-4 py-3.5 text-sm leading-relaxed text-foreground/85">
             {summary}
           </Panel>

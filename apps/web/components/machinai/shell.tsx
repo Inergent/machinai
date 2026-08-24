@@ -19,8 +19,8 @@ const PROJECT_REPO =
 
 const NAV = [
   { href: "/", label: "Idea", icon: Sparkles },
-  { href: "/backlog", label: "Backlog", icon: ListTodo },
-  { href: "/runs", label: "Runs", icon: Activity },
+  { href: "/backlog", label: "Work", icon: ListTodo },
+  { href: "/runs", label: "Builds", icon: Activity },
   { href: "/usage", label: "Settings", icon: Gauge },
 ] as const;
 

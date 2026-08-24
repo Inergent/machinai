@@ -46,7 +46,7 @@ export function IdeaScreen() {
     return (
       <Page
         title="Planning"
-        lead="machinai is decomposing your idea into stories. This takes a couple of minutes."
+        lead="machinai is breaking your idea into tasks. This takes a couple of minutes."
       >
         <Panel className="px-4 py-3.5">
           <p className="text-sm text-muted-foreground">{idea}</p>
@@ -55,9 +55,9 @@ export function IdeaScreen() {
         <Section title="What happens next">
           <ol className="space-y-3">
             {[
-              "Stories are filed as GitHub issues, each with acceptance criteria a test can check.",
-              "Anything with no dependencies is green-lit straight away and starts building.",
-              "The rest wait, and start on their own as their blockers close.",
+              "Tasks are written out with a clear definition of done, so machinai can check its own work.",
+              "Anything that is not waiting on something else starts building straight away.",
+              "The rest start on their own as the work they depend on finishes.",
             ].map((step, i) => (
               <li key={step} className="flex gap-3 text-sm">
                 <Mono className="mt-0.5 shrink-0 text-muted-foreground">
@@ -71,7 +71,7 @@ export function IdeaScreen() {
 
         <div className="mt-8 flex flex-col gap-2 sm:flex-row">
           <Button asChild className="flex-1">
-            <Link href="/backlog">Open the backlog</Link>
+            <Link href="/backlog">See the plan</Link>
           </Button>
           <Button
             variant="outline"
@@ -91,7 +91,7 @@ export function IdeaScreen() {
   return (
     <Page
       title="Describe it"
-      lead="One or two sentences is enough. machinai writes the stories, works out what blocks what, files them as issues, and starts building the ones that are ready."
+      lead="One or two sentences is enough. machinai breaks it into tasks, works out the order, and starts building the ones that are ready."
     >
       <Panel className="p-1.5">
         <Textarea
@@ -133,8 +133,8 @@ export function IdeaScreen() {
         <ol className="grid gap-3 sm:grid-cols-3">
           {[
             ["Describe", "You write the idea. Two sentences."],
-            ["Approve", "Green-light the stories you want built."],
-            ["Walk away", "Agents build. You review from your phone."],
+            ["Approve", "Approve the tasks you want built."],
+            ["Walk away", "machinai builds. You review from your phone."],
           ].map(([t, d], i) => (
             <li key={t} className="rounded-xl border border-border bg-card p-4">
               <Mono className="text-muted-foreground">0{i + 1}</Mono>
@@ -150,8 +150,8 @@ export function IdeaScreen() {
           <p className="flex gap-2.5 text-sm text-muted-foreground">
             <Check className="mt-0.5 size-4 shrink-0 text-state-done" />
             <span>
-              Stories with no dependencies are green-lit automatically, so
-              planning starts real builds. Each one costs a sandbox run.
+              Tasks that are not waiting on anything start building right away,
+              so this does real work. Each one costs a little compute.
             </span>
           </p>
         </Panel>

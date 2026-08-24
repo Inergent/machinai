@@ -44,7 +44,7 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
   return (
     <Page
       title={run.storyTitle}
-      back={{ href: "/runs", label: "Runs" }}
+      back={{ href: "/runs", label: "Builds" }}
       actions={
         pr ? (
           <Button size="sm" asChild>
@@ -99,7 +99,7 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
       </Section>
 
       <Section
-        title="What the agent reported"
+        title="Progress notes"
         aside={
           checkpoints.length > 1 ? (
             <Mono className="text-muted-foreground">
@@ -114,7 +114,7 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
           </Panel>
         ) : (
           <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-            No checkpoint yet.
+            No progress notes yet.
           </p>
         )}
       </Section>

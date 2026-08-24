@@ -47,7 +47,7 @@ export default async function StoryPage({
       <Page
         title={epic.title}
         lead={firstLine(epic.body)}
-        back={{ href: "/backlog", label: "Backlog" }}
+        back={{ href: "/backlog", label: "Work" }}
       >
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <Mono className="text-muted-foreground">#{epic.number}</Mono>
@@ -63,14 +63,14 @@ export default async function StoryPage({
         </div>
 
         <Section
-          title="Stories"
+          title="Tasks"
           aside={
             <Mono className="text-muted-foreground">{members.length}</Mono>
           }
         >
           {members.length === 0 ? (
             <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-              No stories linked to this feature yet.
+              No tasks in this feature yet.
             </p>
           ) : (
             <ul className="space-y-2">
@@ -102,7 +102,7 @@ export default async function StoryPage({
     <Page
       title={story.title}
       lead={story.body}
-      back={{ href: "/backlog", label: "Backlog" }}
+      back={{ href: "/backlog", label: "Work" }}
       actions={
         pr ? (
           <Button size="sm" asChild>
@@ -136,7 +136,7 @@ export default async function StoryPage({
       </div>
 
       {story.blockedBy.length > 0 && (
-        <Section title="Blocked by">
+        <Section title="Waiting on">
           <ul className="space-y-2">
             {story.blockedBy.map((n) => (
               <li key={n}>
@@ -151,13 +151,13 @@ export default async function StoryPage({
             ))}
           </ul>
           <p className="mt-3 text-xs text-muted-foreground">
-            machinai green-lights this automatically once every blocker closes.
+            This starts automatically once the work above is finished.
           </p>
         </Section>
       )}
 
       {story.acceptanceCriteria.length > 0 && (
-        <Section title="Acceptance criteria">
+        <Section title="What done looks like">
           <ul className="space-y-2">
             {story.acceptanceCriteria.map((c) => (
               <li key={c} className="flex gap-2.5 text-sm">
@@ -171,7 +171,7 @@ export default async function StoryPage({
 
       {checkpoints.length > 0 && (
         <Section
-          title="What the agent reported"
+          title="Progress notes"
           aside={
             <Mono className="text-muted-foreground">{checkpoints.length}</Mono>
           }

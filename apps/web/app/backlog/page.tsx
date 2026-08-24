@@ -20,28 +20,28 @@ const GROUPS: { key: string; title: string; hint: string; states: StoryState[] }
     {
       key: "needs-you",
       title: "Needs you",
-      hint: "Review a PR or unblock a stuck story",
+      hint: "Review finished work, or unblock something stuck",
       states: ["in-review", "stuck", "revise"],
     },
     {
       key: "working",
-      title: "Working",
-      hint: "Agents are on these right now",
+      title: "In progress",
+      hint: "machinai is working on these right now",
       states: ["in-progress"],
     },
     {
       key: "queue",
-      title: "Ready to build",
-      hint: "Green-lit and waiting for a slot",
+      title: "Ready to start",
+      hint: "Approved, waiting to start",
       states: ["ready"],
     },
     {
       key: "waiting",
       title: "Waiting",
-      hint: "Blocked by another story, or not green-lit yet",
+      hint: "Waiting on other work, or not approved yet",
       states: ["blocked", "draft"],
     },
-    { key: "done", title: "Done", hint: "Merged", states: ["done"] },
+    { key: "done", title: "Done", hint: "Built and merged", states: ["done"] },
   ];
 
 export default async function BacklogPage() {
@@ -65,15 +65,15 @@ export default async function BacklogPage() {
 
   return (
     <Page
-      title="Backlog"
+      title="Work"
       lead={`Every story is an issue in ${ref.owner}/${ref.repo}. Labels are the state machine, so nothing here can drift from what GitHub says.`}
     >
       {error ? (
-        <Empty title="Could not read the backlog" body={error} />
+        <Empty title="Could not read your work" body={error} />
       ) : stories.length === 0 ? (
         <Empty
-          title="Nothing in the backlog"
-          body="Describe what you want built and machinai will write the stories."
+          title="Nothing to build yet"
+          body="Describe what you want and machinai will break it into tasks."
           action={
             <Button size="sm" asChild>
               <Link href="/">Describe it</Link>
@@ -90,7 +90,7 @@ export default async function BacklogPage() {
               }
             >
               <p className="-mt-1 mb-3 text-xs text-muted-foreground">
-                Each one spans several stories
+                Each one takes several tasks to finish
               </p>
               <EpicList epics={epics} stories={stories} />
             </Section>

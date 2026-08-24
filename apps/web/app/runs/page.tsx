@@ -27,13 +27,13 @@ export default async function RunsPage() {
   const past = runs.filter((r) => r.state !== "running" && r.state !== "queued");
 
   return (
-    <Page title="Runs" lead="Every build attempt, newest first.">
+    <Page title="Builds" lead="Every attempt machinai has made, newest first.">
       {error ? (
-        <Empty title="Could not read runs" body={error} />
+        <Empty title="Could not read builds" body={error} />
       ) : runs.length === 0 ? (
         <Empty
-          title="No runs yet"
-          body="Green-light a story and the first run shows up here."
+          title="Nothing built yet"
+          body="Approve a task and the first build shows up here."
         />
       ) : (
         <>
