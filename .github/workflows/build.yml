@@ -1,0 +1,117 @@
+name: Build a story
+
+# The orchestrator host. It runs in THIS repo and checks out the *target* repo,
+# so target repos keep zero machinai footprint — no workflow file, no config.
+#
+# workflow_dispatch only, deliberately. Nothing here is triggered by activity in
+# this repo; machinai's webhook handler dispatches it with the target repo and
+# issue as inputs. That also keeps a public repo's fork-PR traffic away from
+# these secrets.
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'Target repository, "owner/name"'
+        required: true
+        type: string
+      issue_number:
+        description: "Issue number to build"
+        required: true
+        type: string
+      issue_title:
+        description: "Issue title"
+        required: true
+        type: string
+      base_branch:
+        description: "Branch to build against"
+        required: false
+        default: main
+        type: string
+      install_cmd:
+        required: false
+        default: npm ci
+        type: string
+      test_cmd:
+        required: false
+        default: npm test
+        type: string
+      budget_ms:
+        description: "Sandbox wall-clock budget. Keep under Vercel Hobby's 45-minute session cap."
+        required: false
+        default: "2400000"
+        type: string
+      max_iterations:
+        required: false
+        default: "40"
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Sandbox budget is 40 min; the rest is checkout, install and sync-back.
+    timeout-minutes: 60
+    # One run per story, ever. Double-labelling an issue must not launch two
+    # agents onto the same branch.
+    concurrency:
+      group: machinai-${{ inputs.repo }}-${{ inputs.issue_number }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Check out machinai
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build the story
+        working-directory: packages/harness
+        env:
+          MACHINAI_REPO: ${{ inputs.repo }}
+          MACHINAI_ISSUE_NUMBER: ${{ inputs.issue_number }}
+          MACHINAI_ISSUE_TITLE: ${{ inputs.issue_title }}
+          MACHINAI_BASE_BRANCH: ${{ inputs.base_branch }}
+          MACHINAI_INSTALL_CMD: ${{ inputs.install_cmd }}
+          MACHINAI_TEST_CMD: ${{ inputs.test_cmd }}
+          MACHINAI_BUDGET_MS: ${{ inputs.budget_ms }}
+          MACHINAI_MAX_ITERATIONS: ${{ inputs.max_iterations }}
+          # Short path on purpose: Sandcastle nests worktrees several levels
+          # deep, and a long root is what broke the first Windows runs.
+          MACHINAI_WORKDIR: ${{ runner.temp }}/tb
+
+          # Scoped to the target repo. Phase 3 replaces this PAT with a GitHub
+          # App installation token minted per run — the App is what lets a user
+          # grant access by installing rather than by pasting a token.
+          MACHINAI_GITHUB_TOKEN: ${{ secrets.MACHINAI_GH_PAT }}
+
+          # OIDC is unavailable off-platform, so CI needs a real Vercel token.
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: npx tsx implement.ts
+
+      - name: Report a runner failure
+        # The harness comments on the issue itself for anything it can catch.
+        # This covers what it cannot: the runner dying, the job timing out, a
+        # cancelled run. Without it those fail silently and the story sits in
+        # machinai:in-progress forever.
+        if: failure() || cancelled()
+        env:
+          GH_TOKEN: ${{ secrets.MACHINAI_GH_PAT }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -eu
+          gh issue edit "${{ inputs.issue_number }}" --repo "${{ inputs.repo }}" \
+            --remove-label "machinai:in-progress" || true
+          gh issue edit "${{ inputs.issue_number }}" --repo "${{ inputs.repo }}" \
+            --add-label "machinai:blocked" || true
+          gh issue comment "${{ inputs.issue_number }}" --repo "${{ inputs.repo }}" --body \
+            "<!-- machinai:infra-failure -->
+          **The build runner stopped before machinai could report** (this attempt was not spent).
+
+          [Workflow run](${RUN_URL})"
