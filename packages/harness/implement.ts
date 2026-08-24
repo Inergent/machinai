@@ -10,7 +10,7 @@
  */
 import { join } from "node:path";
 import * as sandcastle from "@ai-hero/sandcastle";
-import { vercel } from "@ai-hero/sandcastle/sandboxes/vercel";
+import { vercelSandbox } from "./lib/vercel-sandbox.js";
 import { branchFor, loadConfig } from "./lib/config.js";
 import { Gh, LABELS } from "./lib/github.js";
 import { assertNoFootprint, prepareTargetRepo } from "./lib/target-repo.js";
@@ -121,7 +121,7 @@ async function main() {
       // injected prompt and writes to it not at all, so a tenant credential
       // never enters an agent environment.
       agent: sandcastle.claudeCode(cfg.model, { env: cfg.agentEnv }),
-      sandbox: vercel({
+      sandbox: vercelSandbox({
         token: cfg.vercelToken,
         teamId: cfg.vercelTeamId,
         projectId: cfg.vercelProjectId,
