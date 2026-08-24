@@ -33,6 +33,13 @@ jobs:
         with:
           node-version: 24
 
+      # Build on Vercel, not here.
+      #
+      # Building on the runner needs a `npm ci` against a lockfile generated on
+      # a developer's machine, and npm omits other platforms' optional
+      # dependencies from a lockfile — so Tailwind's lightningcss resolved to a
+      # win32 binary that does not exist on Linux. Vercel's builder installs
+      # fresh for its own platform and never had the problem.
       - name: Deploy to production
         working-directory: apps/web
         env:
@@ -41,9 +48,7 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           set -euo pipefail
-          npx --yes vercel@latest pull --yes --environment=production --token "$VERCEL_TOKEN"
-          npx --yes vercel@latest build --prod --token "$VERCEL_TOKEN"
-          url=$(npx --yes vercel@latest deploy --prebuilt --prod --token "$VERCEL_TOKEN")
+          url=$(npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN")
           echo "deployed $url"
           # One stable hostname for both the app and the GitHub App's webhook,
           # so a deploy never moves the URL GitHub is configured to call.
