@@ -5,6 +5,8 @@ name: Plan a backlog
 # No Vercel sandbox: decomposition reads nothing and executes nothing, so it
 # runs `claude -p` directly on the runner. That keeps sandbox quota for the work
 # that actually needs a VM, and makes planning effectively free.
+run-name: Plan ${{ inputs.repo }} — ${{ inputs.idea }}
+
 on:
   workflow_dispatch:
     inputs:

@@ -82,6 +82,8 @@ const LABEL_TO_STATE: Record<string, StoryState> = {
 };
 
 const CHECKPOINT_MARKER = "<!-- machinai:checkpoint -->";
+/** Applied by the planner to a parent issue that groups several stories. */
+export const EPIC_LABEL = "machinai:epic";
 
 interface ApiIssue {
   number: number;
@@ -92,6 +94,18 @@ interface ApiIssue {
   labels: { name: string }[];
   pull_request?: unknown;
   comments: number;
+  /** Present on parent issues once GitHub knows they have sub-issues. */
+  sub_issues_summary?: { total: number; completed: number };
+}
+
+/** A feature: one parent issue, several stories beneath it. */
+export interface Epic {
+  number: number;
+  title: string;
+  body: string;
+  total: number;
+  completed: number;
+  storyNumbers: number[];
 }
 
 /**
@@ -121,6 +135,47 @@ function storyState(labels: string[], issueClosed: boolean): StoryState {
   return "draft";
 }
 
+/**
+ * Features and their stories, read from GitHub's sub-issue links.
+ *
+ * One request per epic rather than one per story: a project has a handful of
+ * features and dozens of stories, so this is the cheap direction. Epics are
+ * identified by label because REST gives a parent its children but not a child
+ * its parent.
+ */
+export async function listEpics(ref: ProjectRef): Promise<Epic[]> {
+  const parents = await gh<ApiIssue[]>(
+    ref,
+    `/repos/${ref.owner}/${ref.repo}/issues?state=all&per_page=100&labels=${encodeURIComponent(EPIC_LABEL)}`,
+  );
+
+  return Promise.all(
+    parents
+      .filter((issue) => !issue.pull_request)
+      .map(async (issue) => {
+        let storyNumbers: number[] = [];
+        try {
+          const subs = await gh<{ number: number }[]>(
+            ref,
+            `/repos/${ref.owner}/${ref.repo}/issues/${issue.number}/sub_issues?per_page=100`,
+          );
+          storyNumbers = subs.map((s) => s.number);
+        } catch {
+          // Sub-issues are a newer GitHub feature. An epic with no readable
+          // children is still worth showing, just without progress.
+        }
+        return {
+          number: issue.number,
+          title: issue.title,
+          body: (issue.body ?? "").trim(),
+          total: issue.sub_issues_summary?.total ?? storyNumbers.length,
+          completed: issue.sub_issues_summary?.completed ?? 0,
+          storyNumbers,
+        } satisfies Epic;
+      }),
+  );
+}
+
 export async function listStories(ref: ProjectRef): Promise<Story[]> {
   const issues = await gh<ApiIssue[]>(
     ref,
@@ -130,6 +185,8 @@ export async function listStories(ref: ProjectRef): Promise<Story[]> {
   return issues
     // GitHub returns pull requests from the issues endpoint; they are not stories.
     .filter((issue) => !issue.pull_request)
+    // An epic is a container, not something an agent builds.
+    .filter((issue) => !issue.labels.some((l) => l.name === EPIC_LABEL))
     .map((issue) => {
       const labels = issue.labels.map((l) => l.name);
       const body = issue.body ?? "";
@@ -160,6 +217,41 @@ export async function listStories(ref: ProjectRef): Promise<Story[]> {
         updatedAt: issue.updated_at,
       } satisfies Story;
     });
+}
+
+/** One feature and the stories under it, or null if this issue is not an epic. */
+export async function getEpic(
+  ref: ProjectRef,
+  number: number,
+): Promise<Epic | null> {
+  try {
+    const issue = await gh<ApiIssue>(
+      ref,
+      `/repos/${ref.owner}/${ref.repo}/issues/${number}`,
+    );
+    if (!issue.labels.some((l) => l.name === EPIC_LABEL)) return null;
+
+    let storyNumbers: number[] = [];
+    try {
+      const subs = await gh<{ number: number }[]>(
+        ref,
+        `/repos/${ref.owner}/${ref.repo}/issues/${number}/sub_issues?per_page=100`,
+      );
+      storyNumbers = subs.map((sub) => sub.number);
+    } catch {
+      // Still worth showing the feature without its children.
+    }
+    return {
+      number: issue.number,
+      title: issue.title,
+      body: (issue.body ?? "").trim(),
+      total: issue.sub_issues_summary?.total ?? storyNumbers.length,
+      completed: issue.sub_issues_summary?.completed ?? 0,
+      storyNumbers,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function getStory(

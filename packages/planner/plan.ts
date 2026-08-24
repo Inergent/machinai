@@ -12,6 +12,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { extractPlan, PlanError, validatePlan, type DraftStory } from "./lib/schema.js";
 
+/** Marks a parent issue so the UI can tell a feature from a story. */
+const EPIC_LABEL = "machinai:epic";
+
 interface Config {
   repo: string;
   idea: string;
@@ -143,7 +146,8 @@ function issueBody(story: DraftStory, blockers: number[]): string {
   if (blockers.length > 0) {
     lines.push("", `Blocked by ${blockers.map((n) => `#${n}`).join(", ")}`);
   }
-  lines.push("", `<!-- machinai:epic ${story.epic} -->`);
+  // No epic marker in the body: the epic is a real parent issue now, and the
+  // sub-issue link is the record of it.
   return lines.join("\n");
 }
 
@@ -166,27 +170,72 @@ async function main() {
     return;
   }
 
-  // Two passes. Issue numbers do not exist until the issue does, so
-  // dependencies can only be written once every story has a number.
+  // Created through the API rather than `gh issue create` because linking
+  // sub-issues needs the issue *id*, which the URL from `issue create` does not
+  // carry.
+  const create = (title: string, body: string, labels: string[]) => {
+    const raw = gh(cfg, [
+      "api",
+      `repos/${cfg.repo}/issues`,
+      "-X", "POST",
+      "-f", `title=${title}`,
+      "-f", `body=${body}`,
+      ...labels.flatMap((l) => ["-f", `labels[]=${l}`]),
+      "--jq", "{number: .number, id: .id}",
+    ]);
+    return JSON.parse(raw) as { number: number; id: number };
+  };
+
+  // Epics first, so stories can be attached as they are filed. One issue per
+  // distinct epic name, which is what makes a multi-story feature trackable as
+  // a single thing rather than a label you have to remember to filter by.
+  try {
+    gh(cfg, ["label", "create", EPIC_LABEL, "--repo", cfg.repo, "--color", "8B93A7", "--description", "A feature tracked across several stories", "--force"]);
+  } catch {
+    // Non-fatal: the label is a display nicety, not a correctness requirement.
+  }
+
+  const epicNames = [...new Set(plan.stories.map((s) => s.epic))];
+  const epics = new Map<string, { number: number; id: number }>();
+  for (const name of epicNames) {
+    const members = plan.stories.filter((s) => s.epic === name);
+    const body = [
+      `Part of: ${cfg.idea.trim()}`,
+      "",
+      "## Stories",
+      "",
+      ...members.map((m) => `- ${m.title}`),
+      "",
+      "_machinai tracks this feature through its sub-issues; close them and this closes itself._",
+    ].join("\n");
+    const epic = create(name, body, [EPIC_LABEL]);
+    epics.set(name, epic);
+    console.log(`  epic  #${epic.number}  ${name}`);
+  }
+
+  // Two passes over the stories: issue numbers do not exist until the issue
+  // does, so dependencies can only be written once every story has a number.
   const numbers = new Map<string, number>();
   for (const story of plan.stories) {
-    const url = gh(
-      cfg,
-      [
-        "issue",
-        "create",
-        "--repo",
-        cfg.repo,
-        "--title",
-        story.title,
-        "--body-file",
-        "-",
-      ],
-      issueBody(story, []),
-    );
-    const number = Number(url.trim().split("/").pop());
-    numbers.set(story.id, number);
-    console.log(`  filed #${number}  ${story.title}`);
+    const issue = create(story.title, issueBody(story, []), []);
+    numbers.set(story.id, issue.number);
+
+    const epic = epics.get(story.epic);
+    if (epic) {
+      try {
+        gh(cfg, [
+          "api",
+          `repos/${cfg.repo}/issues/${epic.number}/sub_issues`,
+          "-X", "POST",
+          "-F", `sub_issue_id=${issue.id}`,
+        ]);
+      } catch {
+        // Sub-issues are a newer GitHub feature; if the API refuses, the story
+        // is still filed and buildable, it just is not nested.
+        console.warn(`  could not nest #${issue.number} under #${epic.number}`);
+      }
+    }
+    console.log(`  story #${issue.number}  ${story.title}`);
   }
 
   for (const story of plan.stories) {

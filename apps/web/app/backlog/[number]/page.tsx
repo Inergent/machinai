@@ -9,14 +9,20 @@ import { SignInPrompt } from "@/components/machinai/sign-in";
 import { BuildButton } from "@/components/machinai/build-button";
 import { since } from "@/lib/format";
 import {
+  getEpic,
   getStory,
+  listStories,
   openPullRequestFor,
   projectRef,
   storyCheckpoints,
 } from "@/lib/github-data";
+import { StoryRow } from "@/components/machinai/pieces";
 import { currentSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
+
+/** An epic's body opens with a one-line summary; the rest is its story list. */
+const firstLine = (body: string) => body.split(/\r?\n/)[0] ?? "";
 
 export default async function StoryPage({
   params,
@@ -26,6 +32,60 @@ export default async function StoryPage({
 
   const { number } = await params;
   const ref = projectRef();
+
+  // An epic and a story are both issues, so the same route serves both — a
+  // feature just renders its children instead of acceptance criteria.
+  const epic = await getEpic(ref, Number(number));
+  if (epic) {
+    const all = await listStories(ref);
+    const members = epic.storyNumbers
+      .map((n) => all.find((s) => s.number === n))
+      .filter(Boolean);
+    const done = members.filter((s) => s!.state === "done").length;
+
+    return (
+      <Page
+        title={epic.title}
+        lead={firstLine(epic.body)}
+        back={{ href: "/backlog", label: "Backlog" }}
+      >
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Mono className="text-muted-foreground">#{epic.number}</Mono>
+          <Mono className="text-muted-foreground">
+            {done} of {members.length || epic.total} done
+          </Mono>
+          <a
+            href={`https://github.com/${ref.owner}/${ref.repo}/issues/${epic.number}`}
+            className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            on GitHub
+          </a>
+        </div>
+
+        <Section
+          title="Stories"
+          aside={
+            <Mono className="text-muted-foreground">{members.length}</Mono>
+          }
+        >
+          {members.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+              No stories linked to this feature yet.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {members.map((s) => (
+                <li key={s!.number}>
+                  <StoryRow story={s!} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      </Page>
+    );
+  }
+
   const story = await getStory(ref, Number(number));
   if (!story) notFound();
 

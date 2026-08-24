@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Page } from "@/components/machinai/shell";
 import { Empty, Mono, Section, StoryRow } from "@/components/machinai/pieces";
 import { SignInPrompt } from "@/components/machinai/sign-in";
-import { listStories, projectRef } from "@/lib/github-data";
+import { listEpics, listStories, projectRef, type Epic } from "@/lib/github-data";
+import { EpicList } from "@/components/machinai/epic-list";
 import { currentSession } from "@/lib/session";
 import type { Story, StoryState } from "@/lib/types";
 
@@ -49,9 +50,10 @@ export default async function BacklogPage() {
 
   const ref = projectRef();
   let stories: Story[] = [];
+  let epics: Epic[] = [];
   let error: string | null = null;
   try {
-    stories = await listStories(ref);
+    [stories, epics] = await Promise.all([listStories(ref), listEpics(ref)]);
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
@@ -79,7 +81,22 @@ export default async function BacklogPage() {
           }
         />
       ) : (
-        groups.map((g) => (
+        <>
+          {epics.length > 0 && (
+            <Section
+              title="Features"
+              aside={
+                <Mono className="text-muted-foreground">{epics.length}</Mono>
+              }
+            >
+              <p className="-mt-1 mb-3 text-xs text-muted-foreground">
+                Each one spans several stories
+              </p>
+              <EpicList epics={epics} stories={stories} />
+            </Section>
+          )}
+
+          {groups.map((g) => (
           <Section
             key={g.key}
             title={g.title}
@@ -94,7 +111,8 @@ export default async function BacklogPage() {
               ))}
             </ul>
           </Section>
-        ))
+          ))}
+        </>
       )}
     </Page>
   );

@@ -7,6 +7,11 @@ name: Build a story
 # this repo; machinai's webhook handler dispatches it with the target repo and
 # issue as inputs. That also keeps a public repo's fork-PR traffic away from
 # these secrets.
+# Carries the story into the run title. Without this GitHub names every run
+# after the workflow ("Build a story"), so the runs list is a wall of identical
+# rows and nothing downstream can tell which story a run belongs to.
+run-name: ${{ inputs.repo }}#${{ inputs.issue_number }} — ${{ inputs.issue_title }}
+
 on:
   workflow_dispatch:
     inputs:
