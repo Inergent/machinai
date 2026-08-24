@@ -136,6 +136,35 @@ export async function installationToken(
  * mints its own fresh one, so a queued run cannot start with a token that has
  * already expired.
  */
+export async function dispatchCredential(): Promise<string> {
+  // Preferred: a second GitHub App holding only `actions: write`, installed on
+  // our orchestrator repo alone. It never expires from our point of view, and
+  // its permissions are declared in a manifest rather than typed into a form.
+  const appId = process.env.GH_DISPATCH_APP_ID;
+  const privateKey = process.env.GH_DISPATCH_APP_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  const installationId = process.env.GH_DISPATCH_INSTALLATION_ID;
+
+  if (appId && privateKey && installationId) {
+    const { token } = await installationToken(Number(installationId), {
+      appId,
+      privateKey,
+      // Unused for token minting; the dispatch app has no webhook.
+      webhookSecret: "",
+    });
+    return token;
+  }
+
+  // Fallback: a fine-grained PAT with Actions write. Works, but its creation
+  // form quietly produces a token with no org access if Resource owner is left
+  // as the personal account — which is exactly what happened here, twice.
+  const pat = process.env.MACHINAI_DISPATCH_TOKEN;
+  if (pat) return pat;
+
+  throw new Error(
+    "No dispatch credential: set GH_DISPATCH_APP_ID + GH_DISPATCH_APP_PRIVATE_KEY + GH_DISPATCH_INSTALLATION_ID, or MACHINAI_DISPATCH_TOKEN.",
+  );
+}
+
 export async function dispatchBuild(opts: {
   dispatchToken: string;
   installationId: number;

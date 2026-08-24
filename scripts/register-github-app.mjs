@@ -18,36 +18,90 @@ import { randomBytes } from "node:crypto";
 
 const PORT = Number(process.env.PORT || 7777);
 const ORG = process.env.MACHINAI_ORG || "Inergent";
-const APP_NAME = process.env.MACHINAI_APP_NAME || "machinai";
 const WEBHOOK_BASE =
   process.env.MACHINAI_WEBHOOK_BASE || "https://machinai-dev.vercel.app";
-const OUT =
-  process.env.MACHINAI_APP_CREDS ||
-  resolve(process.env.TEMP || "/tmp", "machinai-github-app.json");
+
+/**
+ * Two apps, deliberately.
+ *
+ * `customer` is what a user installs on their repository. It can read stories
+ * and push branches, and it has no `actions` permission at all — machinai has
+ * no business running workflows inside someone else's repo, and asking for that
+ * at install time would rightly alarm people.
+ *
+ * `dispatch` is machinai's own infrastructure credential. It only ever gets
+ * installed on our orchestrator repo, and it exists so triggering our CI never
+ * requires widening what customers grant. A fine-grained PAT can do this job
+ * too, but its creation form has one field — Resource owner — that silently
+ * produces a token with no org access at all, which is a bad trap to leave in
+ * a setup path.
+ */
+const ROLE = (process.argv[2] || "customer").toLowerCase();
+
+const ROLES = {
+  customer: {
+    name: process.env.MACHINAI_APP_NAME || "machinai",
+    description:
+      "Turns GitHub issues into pull requests. machinai reads a story, builds it in an isolated cloud sandbox, and opens a PR for you to review — without adding a single file to your repository.",
+    permissions: {
+      contents: "write",
+      issues: "write",
+      pull_requests: "write",
+      metadata: "read",
+    },
+    events: ["issues", "issue_comment", "pull_request", "pull_request_review"],
+    webhook: true,
+    credsFile: "machinai-github-app.json",
+    blurb: [
+      ["Contents", "read &amp; write", "clone, push agent branches"],
+      ["Issues", "read &amp; write", "read stories, comment, label"],
+      ["Pull requests", "read &amp; write", "open PRs"],
+      ["Metadata", "read", ""],
+    ],
+  },
+  dispatch: {
+    name: process.env.MACHINAI_APP_NAME || "machinai-dispatch",
+    description:
+      "machinai's internal credential for triggering its own build workflow. Install this only on the machinai orchestrator repository — never on a project repo.",
+    permissions: { actions: "write", metadata: "read" },
+    events: [],
+    webhook: false,
+    credsFile: "machinai-dispatch-app.json",
+    blurb: [
+      ["Actions", "read &amp; write", "start the build workflow"],
+      ["Metadata", "read", ""],
+    ],
+  },
+};
+
+const role = ROLES[ROLE];
+if (!role) {
+  console.error(`Unknown role "${ROLE}". Use "customer" or "dispatch".`);
+  process.exit(1);
+}
+
+const APP_NAME = role.name;
+const OUT = process.env.MACHINAI_APP_CREDS || resolve(process.env.TEMP || "/tmp", role.credsFile);
 
 const state = randomBytes(16).toString("hex");
 
 const manifest = {
   name: APP_NAME,
   url: WEBHOOK_BASE,
-  description:
-    "Turns GitHub issues into pull requests. machinai reads a story, builds it in an isolated cloud sandbox, and opens a PR for you to review — without adding a single file to your repository.",
-  hook_attributes: { url: `${WEBHOOK_BASE}/api/github/webhook`, active: true },
+  description: role.description,
+  ...(role.webhook
+    ? {
+        hook_attributes: {
+          url: `${WEBHOOK_BASE}/api/github/webhook`,
+          active: true,
+        },
+      }
+    : {}),
   redirect_url: `http://localhost:${PORT}/callback`,
   public: false,
-  // Exactly what the loop needs and nothing more.
-  default_permissions: {
-    contents: "write", // clone, push the machinai/* branch
-    issues: "write", // read the story, comment, label
-    pull_requests: "write", // open and update the PR
-    metadata: "read", // required by GitHub alongside the above
-  },
-  default_events: [
-    "issues", // the machinai:ready label is the trigger
-    "issue_comment", // feedback on a story
-    "pull_request", // merged / closed transitions
-    "pull_request_review",
-  ],
+  // Exactly what this role needs and nothing more.
+  default_permissions: role.permissions,
+  default_events: role.events,
 };
 
 const page = `<!doctype html>
@@ -67,13 +121,15 @@ const page = `<!doctype html>
   button:hover { background:#6b93ff; }
 </style>
 <div class="card">
-  <h1>Register the machinai app</h1>
-  <p>This creates a GitHub App on the <code>${ORG}</code> organisation with exactly these permissions:</p>
+  <h1>Register <code>${APP_NAME}</code></h1>
+  <p>This creates <code>${APP_NAME}</code> on the <code>${ORG}</code> organisation with exactly these permissions:</p>
   <ul>
-    <li>Contents — read &amp; write <span style="opacity:.7">(clone, push agent branches)</span></li>
-    <li>Issues — read &amp; write <span style="opacity:.7">(read stories, comment, label)</span></li>
-    <li>Pull requests — read &amp; write <span style="opacity:.7">(open PRs)</span></li>
-    <li>Metadata — read</li>
+    ${role.blurb
+      .map(
+        ([name, level, why]) =>
+          `<li>${name} — ${level}${why ? ` <span style="opacity:.7">(${why})</span>` : ""}</li>`,
+      )
+      .join("\n    ")}
   </ul>
   <p>Nothing is installed on any repository yet — you choose that in the next step.</p>
   <form method="post" action="https://github.com/organizations/${ORG}/settings/apps/new?state=${state}">

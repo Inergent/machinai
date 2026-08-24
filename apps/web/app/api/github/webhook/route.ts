@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import {
+  dispatchCredential,
   dispatchBuild,
   installationToken,
   loadAppConfig,
@@ -160,13 +161,15 @@ export async function POST(request: Request) {
         return;
       }
 
-      const dispatchToken = process.env.MACHINAI_DISPATCH_TOKEN;
-      if (!dispatchToken) {
+      let dispatchToken: string;
+      try {
+        dispatchToken = await dispatchCredential();
+      } catch (error) {
         await comment(
           repo,
           issueNumber,
           token,
-          "machinai received this but cannot start a build: `MACHINAI_DISPATCH_TOKEN` is not configured.",
+          `machinai received this but cannot start a build — its dispatch credential is not configured.\n\n\`${error instanceof Error ? error.message : String(error)}\``,
         );
         return;
       }
