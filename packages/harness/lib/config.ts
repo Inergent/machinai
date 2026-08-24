@@ -66,6 +66,15 @@ function num(name: string, fallback: number): number {
 }
 
 export function loadConfig(): HarnessConfig {
+  // Fail before we provision anything. Without a Claude credential the agent
+  // dies *inside* the sandbox, after the microVM has already been paid for.
+  if (!process.env.CLAUDE_CODE_OAUTH_TOKEN && !process.env.ANTHROPIC_API_KEY) {
+    throw new ConfigError(
+      "No Claude credential. Set CLAUDE_CODE_OAUTH_TOKEN (run `claude setup-token`) " +
+        "or ANTHROPIC_API_KEY before running the harness.",
+    );
+  }
+
   const repo = req("MACHINAI_REPO");
   if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) {
     throw new ConfigError(`MACHINAI_REPO must be "owner/name", got: ${repo}`);
