@@ -69,7 +69,15 @@ export async function POST(request: Request) {
   }
 
   const event = request.headers.get("x-github-event");
-  const payload = JSON.parse(raw) as IssueEvent;
+
+  let payload: IssueEvent;
+  try {
+    payload = JSON.parse(raw) as IssueEvent;
+  } catch {
+    // 400, not 500: GitHub retries 5xx, and a body that will not parse now
+    // will not parse on the retry either.
+    return new Response("Malformed JSON", { status: 400 });
+  }
 
   // Acknowledge fast. GitHub retries on a slow response, and a retry here
   // means a duplicate agent run.
@@ -80,6 +88,13 @@ export async function POST(request: Request) {
   const labelName = payload.label?.name;
   if (labelName !== LABEL.ready && labelName !== LABEL.revise) {
     return Response.json({ ok: true, ignored: labelName });
+  }
+
+  // Same reasoning as the parse failure: a payload missing the fields this
+  // event type is defined to carry is malformed, so reject it permanently
+  // rather than letting a property access throw a retryable 500.
+  if (!payload.issue || !payload.repository?.full_name) {
+    return new Response("Payload missing issue or repository", { status: 400 });
   }
 
   // A GitHub issue number can be a pull request; building one would be
