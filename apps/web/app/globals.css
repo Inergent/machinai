@@ -1,0 +1,179 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  /* Literal family names: @theme inline resolves at parse time, so a
+     var(--font-geist-sans) reference here would silently resolve to nothing. */
+  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  --font-heading: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Run/story state. The only colours allowed outside the neutral ramp. */
+  --color-state-running: var(--state-running);
+  --color-state-done: var(--state-done);
+  --color-state-review: var(--state-review);
+  --color-state-blocked: var(--state-blocked);
+  --color-state-idle: var(--state-idle);
+  --color-accent-wash: var(--accent-wash);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+}
+
+/* Light. Defined on bare :root so nothing depends on a media query to exist. */
+:root {
+  --radius: 0.75rem;
+
+  --background: #fbfcfd;
+  --foreground: #11141a;
+  --card: #ffffff;
+  --card-foreground: #11141a;
+  --popover: #ffffff;
+  --popover-foreground: #11141a;
+
+  --primary: #2f5fe0;
+  --primary-foreground: #ffffff;
+  --accent-wash: rgb(47 95 224 / 0.1);
+
+  --secondary: #f4f6fa;
+  --secondary-foreground: #11141a;
+  --muted: #f4f6fa;
+  --muted-foreground: #616b80;
+  --accent: #f4f6fa;
+  --accent-foreground: #11141a;
+
+  --border: #e4e8ef;
+  --input: #e4e8ef;
+  --ring: #2f5fe0;
+  --destructive: #d94f4f;
+
+  --state-running: #2f5fe0;
+  --state-done: #16a86a;
+  --state-review: #c07d10;
+  --state-blocked: #d94f4f;
+  --state-idle: #8992a5;
+}
+
+.dark {
+  --background: #0b0d12;
+  --foreground: #e6e9ef;
+  --card: #12151c;
+  --card-foreground: #e6e9ef;
+  --popover: #181c25;
+  --popover-foreground: #e6e9ef;
+
+  --primary: #4c7dff;
+  --primary-foreground: #0b0d12;
+  --accent-wash: rgb(76 125 255 / 0.12);
+
+  --secondary: #181c25;
+  --secondary-foreground: #e6e9ef;
+  --muted: #181c25;
+  --muted-foreground: #8b93a7;
+  --accent: #181c25;
+  --accent-foreground: #e6e9ef;
+
+  --border: #232833;
+  --input: #232833;
+  --ring: #4c7dff;
+  --destructive: #f26d6d;
+
+  --state-running: #4c7dff;
+  --state-done: #3dd68c;
+  --state-review: #f5a623;
+  --state-blocked: #f26d6d;
+  --state-idle: #5a6478;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Machine-produced values read as machine-produced. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  /* The one piece of motion in the app: a live run. */
+  @keyframes machinai-pulse {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.55;
+      transform: scale(0.86);
+    }
+  }
+  .animate-state-pulse {
+    animation: machinai-pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  @keyframes machinai-halo {
+    0% {
+      opacity: 0.5;
+      transform: scale(1);
+    }
+    70%,
+    100% {
+      opacity: 0;
+      transform: scale(2.4);
+    }
+  }
+  .animate-state-halo {
+    animation: machinai-halo 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  @keyframes machinai-rise {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-state-pulse,
+    .animate-state-halo,
+    [style*="machinai-rise"] {
+      animation: none !important;
+    }
+  }
+}
