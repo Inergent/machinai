@@ -2,7 +2,6 @@ import Link from "next/link";
 import { GitBranch, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { compact, duration, pct, since } from "@/lib/format";
-import { NOW } from "@/lib/fixtures/data";
 import type {
   Commit,
   DiffFile,
@@ -65,7 +64,7 @@ export function Mono({
   );
 }
 
-export function StoryRow({ story }: { story: Story }) {
+export function StoryRow({ story, now = new Date() }: { story: Story; now?: Date }) {
   const blocked = story.state === "blocked";
   return (
     <Link
@@ -82,7 +81,7 @@ export function StoryRow({ story }: { story: Story }) {
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium leading-snug">{story.title}</p>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span>{since(story.updatedAt, NOW)}</span>
+          <span>{since(story.updatedAt, now)}</span>
           {story.branch && (
             <span className="inline-flex items-center gap-1">
               <GitBranch className="size-3" />

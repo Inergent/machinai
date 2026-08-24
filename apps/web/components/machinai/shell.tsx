@@ -13,13 +13,15 @@ import {
   Sun,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { project } from "@/lib/fixtures/data";
+/** Set at build time; the repo machinai is pointed at. */
+const PROJECT_REPO =
+  process.env.NEXT_PUBLIC_MACHINAI_PROJECT_REPO ?? "Inergent/machinai-testbed";
 
 const NAV = [
   { href: "/", label: "Idea", icon: Sparkles },
   { href: "/backlog", label: "Backlog", icon: ListTodo },
   { href: "/runs", label: "Runs", icon: Activity },
-  { href: "/usage", label: "Usage", icon: Gauge },
+  { href: "/usage", label: "Settings", icon: Gauge },
 ] as const;
 
 function isActive(pathname: string, href: string) {
@@ -92,7 +94,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               Project
             </p>
             <p className="mt-1 truncate font-mono text-xs text-foreground">
-              {project.repo}
+              {PROJECT_REPO}
             </p>
           </div>
           <ThemeToggle />
@@ -104,7 +106,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <Wordmark />
         <div className="flex items-center gap-1">
           <span className="max-w-[9rem] truncate font-mono text-xs text-muted-foreground">
-            {project.repo}
+            {PROJECT_REPO}
           </span>
           <ThemeToggle />
         </div>

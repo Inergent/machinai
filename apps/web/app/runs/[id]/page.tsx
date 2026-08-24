@@ -1,50 +1,54 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { GitPullRequest, Square } from "lucide-react";
+import { GitPullRequest } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Page } from "@/components/machinai/shell";
-import {
-  CommitList,
-  LogTail,
-  Mono,
-  Panel,
-  Section,
-  TestSummary,
-} from "@/components/machinai/pieces";
+import { Mono, Panel, Section } from "@/components/machinai/pieces";
 import { RunBadge } from "@/components/machinai/state";
 import { RunTimeline } from "@/components/machinai/run-timeline";
+import { SignInPrompt } from "@/components/machinai/sign-in";
 import { duration, since } from "@/lib/format";
-import { NOW, runById, runs } from "@/lib/fixtures/data";
+import {
+  getRun,
+  openPullRequestFor,
+  projectRef,
+  storyCheckpoints,
+} from "@/lib/github-data";
+import { currentSession } from "@/lib/session";
 
-export function generateStaticParams() {
-  return runs.map((r) => ({ id: r.id }));
-}
+export const dynamic = "force-dynamic";
 
 export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
+  const session = await currentSession();
+  if (!session) return <SignInPrompt />;
+
   const { id } = await params;
-  const run = runById(id);
+  const ref = projectRef();
+  const run = await getRun(ref, id);
   if (!run) notFound();
 
-  const live = run.state === "running";
+  const now = new Date();
   const budgetPct = Math.min(
     100,
     Math.round((run.elapsedMs / run.sandbox.timeoutMs) * 100),
   );
 
+  // The agent's own account of the run. Actions can see the job, not what
+  // happened inside the sandbox — the checkpoint is where that lives.
+  const checkpoints = run.storyNumber
+    ? await storyCheckpoints(ref, run.storyNumber).catch(() => [])
+    : [];
+  const latest = checkpoints.at(-1);
+  const pr = run.storyNumber ? await openPullRequestFor(ref, run.storyNumber) : null;
+
   return (
     <Page
       title={run.storyTitle}
-      lead={run.note}
       back={{ href: "/runs", label: "Runs" }}
       actions={
-        live ? (
-          <Button size="sm" variant="outline">
-            <Square className="size-4" />
-            Stop
-          </Button>
-        ) : run.prNumber ? (
+        pr ? (
           <Button size="sm" asChild>
-            <Link href={`/review/${run.prNumber}`}>
+            <Link href={`/review/${pr}`}>
               <GitPullRequest className="size-4" />
               Review PR
             </Link>
@@ -54,18 +58,17 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
     >
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <RunBadge state={run.state} />
-        <Link
-          href={`/backlog/${run.storyNumber}`}
-          className="font-mono text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-        >
-          #{run.storyNumber}
-        </Link>
-        <Mono className="text-muted-foreground">{run.branch}</Mono>
-        <Mono className="text-muted-foreground">
-          attempt {run.attempt}/{run.maxAttempts}
-        </Mono>
+        {run.storyNumber > 0 && (
+          <Link
+            href={`/backlog/${run.storyNumber}`}
+            className="font-mono text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            #{run.storyNumber}
+          </Link>
+        )}
+        {run.branch && <Mono className="text-muted-foreground">{run.branch}</Mono>}
         <span className="text-xs text-muted-foreground">
-          started {since(run.startedAt, NOW)}
+          started {since(run.startedAt, now)}
         </span>
       </div>
 
@@ -85,44 +88,35 @@ export default async function RunPage({ params }: PageProps<"/runs/[id]">) {
       >
         <div className="h-1 overflow-hidden rounded-full bg-secondary">
           <div
-            className={`h-full rounded-full ${
-              budgetPct >= 90 ? "bg-state-review" : "bg-state-running"
-            }`}
+            className={`h-full rounded-full ${budgetPct >= 90 ? "bg-state-review" : "bg-state-running"}`}
             style={{ width: `${Math.max(budgetPct, 1.5)}%` }}
           />
         </div>
         <p className="mt-2.5 text-xs text-muted-foreground">
-          {run.sandbox.vcpus} vCPU · {run.sandbox.memoryGb} GB ·{" "}
-          {run.sandbox.region}. Vercel Hobby caps a session at 45 minutes, so
-          machinai stops at 40 and commits what it has — the next attempt resumes
-          on the same branch.
+          Vercel Hobby caps a session at 45 minutes, so machinai stops at 40 and
+          commits what it has — the next attempt resumes on the same branch.
         </p>
       </Section>
 
       <Section
-        title="Log"
+        title="What the agent reported"
         aside={
-          live ? (
-            <Mono className="text-state-running">live</Mono>
-          ) : (
-            <Mono className="text-muted-foreground">last {run.logTail.length}</Mono>
-          )
+          checkpoints.length > 1 ? (
+            <Mono className="text-muted-foreground">
+              attempt {checkpoints.length}
+            </Mono>
+          ) : null
         }
       >
-        <LogTail lines={run.logTail} />
-      </Section>
-
-      {run.tests && (
-        <Section title="Tests">
-          <TestSummary tests={run.tests} />
-        </Section>
-      )}
-
-      <Section
-        title="Commits"
-        aside={<Mono className="text-muted-foreground">{run.commits.length}</Mono>}
-      >
-        <CommitList commits={run.commits} />
+        {latest ? (
+          <Panel className="whitespace-pre-wrap px-4 py-3.5 text-sm leading-relaxed text-foreground/85">
+            {latest.body}
+          </Panel>
+        ) : (
+          <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+            No checkpoint yet.
+          </p>
+        )}
       </Section>
     </Page>
   );

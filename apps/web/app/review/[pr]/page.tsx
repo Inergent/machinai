@@ -1,88 +1,112 @@
 import { notFound } from "next/navigation";
 import { Page } from "@/components/machinai/shell";
-import { Mono, Panel, Section } from "@/components/machinai/pieces";
-import { ReviewActions } from "@/components/machinai/review-actions";
-import { DiffView } from "@/components/machinai/pieces";
-import { pullRequest } from "@/lib/fixtures/data";
+import { DiffView, Mono, Panel, Section } from "@/components/machinai/pieces";
+import { SignInPrompt } from "@/components/machinai/sign-in";
+import { getPullRequest, projectRef, storyCheckpoints } from "@/lib/github-data";
+import { currentSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
-export function generateStaticParams() {
-  return [{ pr: String(pullRequest.number) }];
-}
+export const dynamic = "force-dynamic";
 
 export default async function ReviewPage({ params }: PageProps<"/review/[pr]">) {
+  const session = await currentSession();
+  if (!session) return <SignInPrompt />;
+
   const { pr } = await params;
-  if (Number(pr) !== pullRequest.number) notFound();
-  const prData = pullRequest;
+  const ref = projectRef();
+  const pull = await getPullRequest(ref, Number(pr));
+  if (!pull) notFound();
+
+  // The PR body is a stub pointing at the story; the agent's reasoning lives in
+  // its checkpoint on the issue, which is what a reviewer actually wants.
+  const checkpoints = pull.storyNumber
+    ? await storyCheckpoints(ref, pull.storyNumber).catch(() => [])
+    : [];
+  const summary = checkpoints.at(-1)?.body ?? pull.agentSummary;
 
   return (
     <Page
-      title={prData.title}
-      lead="The agent's work, ready for your call."
-      back={{
-        href: `/backlog/${prData.storyNumber}`,
-        label: `Story #${prData.storyNumber}`,
-      }}
+      title={pull.title}
+      lead={
+        pull.state === "merged"
+          ? "Merged."
+          : "The agent's work, ready for your call."
+      }
+      back={
+        pull.storyNumber
+          ? {
+              href: `/backlog/${pull.storyNumber}`,
+              label: `Story #${pull.storyNumber}`,
+            }
+          : { href: "/backlog", label: "Backlog" }
+      }
     >
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <Mono className="text-muted-foreground">PR #{prData.number}</Mono>
+        <Mono className="text-muted-foreground">PR #{pull.number}</Mono>
         <Mono className="text-muted-foreground">
-          {prData.branch} → {prData.baseBranch}
+          {pull.branch} → {pull.baseBranch}
         </Mono>
         <Mono>
-          <span className="text-state-done">+{prData.additions}</span>{" "}
-          <span className="text-state-blocked">−{prData.deletions}</span>
+          <span className="text-state-done">+{pull.additions}</span>{" "}
+          <span className="text-state-blocked">−{pull.deletions}</span>
         </Mono>
+        <a
+          href={`https://github.com/${ref.owner}/${ref.repo}/pull/${pull.number}`}
+          className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          on GitHub
+        </a>
       </div>
 
-      <Section title="What the agent did">
-        <Panel className="px-4 py-3.5">
-          <p className="text-sm leading-relaxed text-foreground/85">
-            {prData.agentSummary}
-          </p>
-        </Panel>
-      </Section>
+      {summary && (
+        <Section title="What the agent did">
+          <Panel className="whitespace-pre-wrap px-4 py-3.5 text-sm leading-relaxed text-foreground/85">
+            {summary}
+          </Panel>
+        </Section>
+      )}
 
-      <Section title="Checks">
-        <ul className="flex flex-wrap gap-2">
-          {prData.checks.map((c) => (
-            <li
-              key={c.name}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 font-mono text-xs",
-                c.state === "passed" && "text-state-done",
-                c.state === "failed" && "text-state-blocked",
-                c.state === "running" && "text-state-running",
-              )}
-            >
-              <span
+      {pull.checks.length > 0 && (
+        <Section title="Checks">
+          <ul className="flex flex-wrap gap-2">
+            {pull.checks.map((c) => (
+              <li
+                key={c.name}
                 className={cn(
-                  "size-1.5 rounded-full",
-                  c.state === "passed" && "bg-state-done",
-                  c.state === "failed" && "bg-state-blocked",
-                  c.state === "running" && "bg-state-running animate-state-pulse",
+                  "inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 font-mono text-xs",
+                  c.state === "passed" && "text-state-done",
+                  c.state === "failed" && "text-state-blocked",
+                  c.state === "running" && "text-state-running",
                 )}
-              />
-              {c.name}
-            </li>
-          ))}
-        </ul>
-      </Section>
+              >
+                <span
+                  className={cn(
+                    "size-1.5 rounded-full",
+                    c.state === "passed" && "bg-state-done",
+                    c.state === "failed" && "bg-state-blocked",
+                    c.state === "running" &&
+                      "bg-state-running animate-state-pulse",
+                  )}
+                />
+                {c.name}
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
 
       <Section
         title="Changes"
         aside={
-          <Mono className="text-muted-foreground">{prData.files.length} files</Mono>
+          <Mono className="text-muted-foreground">{pull.files.length} files</Mono>
         }
       >
         <div className="space-y-3">
-          {prData.files.map((f) => (
+          {pull.files.map((f) => (
             <DiffView key={f.path} file={f} />
           ))}
         </div>
       </Section>
-
-      <ReviewActions />
     </Page>
   );
 }

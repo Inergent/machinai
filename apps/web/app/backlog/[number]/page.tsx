@@ -1,38 +1,42 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Check, GitPullRequest, Play, Square } from "lucide-react";
+import { Check, GitPullRequest, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Page } from "@/components/machinai/shell";
 import { Mono, Panel, Section } from "@/components/machinai/pieces";
-import { RunBadge, StoryBadge } from "@/components/machinai/state";
-import { duration, since } from "@/lib/format";
+import { StoryBadge } from "@/components/machinai/state";
+import { SignInPrompt } from "@/components/machinai/sign-in";
+import { BuildButton } from "@/components/machinai/build-button";
+import { since } from "@/lib/format";
 import {
-  NOW,
-  epicByNumber,
-  runsForStory,
-  stories,
-  storyByNumber,
-} from "@/lib/fixtures/data";
+  getStory,
+  openPullRequestFor,
+  projectRef,
+  storyCheckpoints,
+} from "@/lib/github-data";
+import { currentSession } from "@/lib/session";
 
-export function generateStaticParams() {
-  return stories.map((s) => ({ number: String(s.number) }));
-}
+export const dynamic = "force-dynamic";
 
 export default async function StoryPage({
   params,
 }: PageProps<"/backlog/[number]">) {
+  const session = await currentSession();
+  if (!session) return <SignInPrompt />;
+
   const { number } = await params;
-  const story = storyByNumber(Number(number));
+  const ref = projectRef();
+  const story = await getStory(ref, Number(number));
   if (!story) notFound();
 
-  const epic = epicByNumber(story.epic);
-  const history = runsForStory(story.number);
-  const blockers = story.blockedBy
-    .map((n) => storyByNumber(n))
-    .filter(Boolean) as NonNullable<ReturnType<typeof storyByNumber>>[];
-
-  const canBuild = story.state === "ready" || story.state === "draft";
-  const building = story.state === "in-progress";
+  const now = new Date();
+  const checkpoints = await storyCheckpoints(ref, story.number).catch(() => []);
+  const pr = await openPullRequestFor(ref, story.number);
+  const buildable =
+    story.state === "draft" ||
+    story.state === "ready" ||
+    story.state === "blocked" ||
+    story.state === "stuck";
 
   return (
     <Page
@@ -40,67 +44,48 @@ export default async function StoryPage({
       lead={story.body}
       back={{ href: "/backlog", label: "Backlog" }}
       actions={
-        <div className="flex items-center gap-2">
-          {building ? (
-            <Button size="sm" variant="outline">
-              <Square className="size-4" />
-              Stop
-            </Button>
-          ) : canBuild ? (
-            <Button size="sm">
-              <Play className="size-4" />
-              Build
-            </Button>
-          ) : story.prNumber ? (
-            <Button size="sm" asChild>
-              <Link href={`/review/${story.prNumber}`}>
-                <GitPullRequest className="size-4" />
-                Review
-              </Link>
-            </Button>
-          ) : null}
-        </div>
+        pr ? (
+          <Button size="sm" asChild>
+            <Link href={`/review/${pr}`}>
+              <GitPullRequest className="size-4" />
+              Review
+            </Link>
+          </Button>
+        ) : buildable ? (
+          <BuildButton issueNumber={story.number} />
+        ) : null
       }
     >
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <StoryBadge state={story.state} />
         <Mono className="text-muted-foreground">#{story.number}</Mono>
-        {epic && (
-          <Mono className="text-muted-foreground">{epic.title}</Mono>
+        {story.attempts > 0 && (
+          <Mono className="text-muted-foreground">
+            attempt {story.attempts}/{story.maxAttempts}
+          </Mono>
         )}
-        <Mono className="text-muted-foreground">size {story.size}</Mono>
         <span className="text-xs text-muted-foreground">
-          updated {since(story.updatedAt, NOW)}
+          updated {since(story.updatedAt, now)}
         </span>
+        <a
+          href={`https://github.com/${ref.owner}/${ref.repo}/issues/${story.number}`}
+          className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          on GitHub
+        </a>
       </div>
 
-      {story.state === "stuck" && (
-        <Panel className="mt-6 border-state-blocked/30 px-4 py-3.5">
-          <p className="text-sm font-medium text-state-blocked">
-            Stopped after {story.attempts} attempts
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            machinai will not spend another run until something changes. Leave
-            feedback on the issue, or edit the acceptance criteria and re-green-light
-            it.
-          </p>
-        </Panel>
-      )}
-
-      {blockers.length > 0 && (
+      {story.blockedBy.length > 0 && (
         <Section title="Blocked by">
           <ul className="space-y-2">
-            {blockers.map((b) => (
-              <li key={b.number}>
+            {story.blockedBy.map((n) => (
+              <li key={n}>
                 <Link
-                  href={`/backlog/${b.number}`}
+                  href={`/backlog/${n}`}
                   className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors duration-150 hover:border-foreground/15"
                 >
-                  <Mono className="w-9 shrink-0 text-muted-foreground">
-                    #{b.number}
-                  </Mono>
-                  <span className="min-w-0 flex-1 text-sm">{b.title}</span>
-                  <StoryBadge state={b.state} />
+                  <Lock className="size-3.5 text-muted-foreground" />
+                  <Mono className="text-muted-foreground">#{n}</Mono>
                 </Link>
               </li>
             ))}
@@ -111,40 +96,39 @@ export default async function StoryPage({
         </Section>
       )}
 
-      <Section title="Acceptance criteria">
-        <ul className="space-y-2">
-          {story.acceptanceCriteria.map((c) => (
-            <li key={c} className="flex gap-2.5 text-sm">
-              <Check className="mt-0.5 size-4 shrink-0 text-state-done" />
-              <span className="text-foreground/85">{c}</span>
-            </li>
-          ))}
-        </ul>
-      </Section>
-
-      {history.length > 0 && (
-        <Section title="Runs">
+      {story.acceptanceCriteria.length > 0 && (
+        <Section title="Acceptance criteria">
           <ul className="space-y-2">
-            {history.map((r) => (
-              <li key={r.id}>
-                <Link
-                  href={`/runs/${r.id}`}
-                  className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-border bg-card px-4 py-3 transition-colors duration-150 hover:border-foreground/15"
-                >
-                  <RunBadge state={r.state} />
-                  <Mono className="text-muted-foreground">
-                    attempt {r.attempt}/{r.maxAttempts}
-                  </Mono>
-                  <Mono className="text-muted-foreground">
-                    {duration(r.elapsedMs)}
-                  </Mono>
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {since(r.startedAt, NOW)}
-                  </span>
-                </Link>
+            {story.acceptanceCriteria.map((c) => (
+              <li key={c} className="flex gap-2.5 text-sm">
+                <Check className="mt-0.5 size-4 shrink-0 text-state-done" />
+                <span className="text-foreground/85">{c}</span>
               </li>
             ))}
           </ul>
+        </Section>
+      )}
+
+      {checkpoints.length > 0 && (
+        <Section
+          title="What the agent reported"
+          aside={
+            <Mono className="text-muted-foreground">{checkpoints.length}</Mono>
+          }
+        >
+          <div className="space-y-2.5">
+            {checkpoints
+              .slice()
+              .reverse()
+              .map((c) => (
+                <Panel
+                  key={c.createdAt}
+                  className="whitespace-pre-wrap px-4 py-3.5 text-sm leading-relaxed text-foreground/85"
+                >
+                  {c.body}
+                </Panel>
+              ))}
+          </div>
         </Section>
       )}
     </Page>

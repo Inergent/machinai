@@ -92,6 +92,20 @@ export function IdeaScreen() {
     >
       {phase === "idle" && (
         <>
+          {/* Honest about what this is. The planner is not built yet, and a
+              screen that looks functional but files nothing is worse than one
+              that says so. */}
+          <Panel className="mb-6 border-state-review/30 px-4 py-3">
+            <p className="text-sm">
+              <span className="font-medium text-state-review">Preview.</span>{" "}
+              <span className="text-muted-foreground">
+                The planner is not built yet — this shows what it will do, using
+                a canned example. Nothing here files an issue. Everything else in
+                machinai is live.
+              </span>
+            </p>
+          </Panel>
+
           <Panel className="p-1.5">
             <Textarea
               value={idea}
@@ -208,7 +222,7 @@ export function IdeaScreen() {
                     <X className="size-4" />
                     Discard
                   </Button>
-                  <Button size="sm">
+                  <Button size="sm" disabled title="Not built yet">
                     <Check className="size-4" />
                     File as issues
                   </Button>
